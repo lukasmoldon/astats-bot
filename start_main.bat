@@ -1,2 +1,2 @@
-python steambot.py main
+python bot.py main
 pause
