@@ -15,15 +15,18 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # URL for giveaways
 url_ga = "https://astats.astats.nl/astats/Giveaway.php?GiveawayID="
+
+# URL for profile page
+url_profile_ga = "http://astats.astats.nl/astats/User_Info.php?SteamID64="
+
 # Get account name from first console argument
-account_name = sys.argv[1] # supports multiple accounts, data of that account gets selected over first argument (name of account: main/secondary)
+account_name = sys.argv[1]
 
-
-# Read last IDs
+# Read last ID for the account name from txt file
 with open("lastIDs.txt", "r") as file:
     input = file.readlines()
 
-id = 99999
+id = -1
 
 i = 0 
 while(i < len(input)):
@@ -32,11 +35,19 @@ while(i < len(input)):
     if (str_split[0] == account_name):
         id = int(str_split[1])
     i += 1
+if(id == -1):
+    logging.critical("Corrupted lastIDs.txt file!")
+
+# Steam64ID for diffrent accounts
+steam_id = {
+    "main": "", # Enter Steam profile ID here 
+    "secondary": "" # Enter Steam profile ID here 
+}
 
 # COOKIE_NAME for different accounts
 accounts_cookie = {
     "main": "", # Enter Cookie ID here 
-    "secondary": "" # Enter Cookie ID here
+    "secondary": "" # Enter Cookie ID here 
 }
 
 # PHPSESSID for different accounts
@@ -52,31 +63,51 @@ cookies_ga = {
     "PHPSESSID": accounts_phpID[account_name]
 }
 
+# Modify Header for GET and POST (remove "python-requests/.." User-Agent)
+header = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.103 Safari/537.36', 
+    'Accept-Encoding': 'gzip, deflate', 
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3', 
+    'Connection': 'keep-alive'
+}
+
 # Payload for joining the giveaway
 payload_ga = {
     "Comment": "",
     "JoinGiveaway": "Join"
 }
 
+# Counters for the statistics
+cntJoined = 0
+
 #Sessions for GET and POST requests
 session_ga_post = requests.Session()
 session_ga_get = requests_html.HTMLSession()
 
+# Visit profile page before joining giveaways
+profile_ga = session_ga_get.get(url_profile_ga + steam_id[account_name], cookies=cookies_ga, headers=header, verify=False)
+
+# Check if HTTP request works
+if(not profile_ga.ok):
+    logging.critical("Received HTTP status code" + profile_ga.status_code)
+
 while(True):
 	# GET request for giveaway page
-    req_ga_get = session_ga_get.get(url_ga + str(id), cookies=cookies_ga, verify=False)
+    req_ga_get = session_ga_get.get(url_ga + str(id), cookies=cookies_ga, headers=header, verify=False)
     # Search for the navbar -> Page exists
     navbar = req_ga_get.html.find(".navbar-brand")
     # Search for button to join the giveaway
     button = req_ga_get.html.find("[name=JoinGiveaway]")
     if(len(navbar) > 0):
+        
         if(len(button) > 0):
-            time.sleep(1 + random.randint(1, 5))
+            time.sleep(random.randint(1, 3))
             # POST request to join the giveaway
-            req_ga_post = session_ga_post.post(url_ga + str(id), cookies=cookies_ga, data=payload_ga, verify=False)
+            req_ga_post = session_ga_post.post(url_ga + str(id), cookies=cookies_ga, headers=header, data=payload_ga, verify=False)
+            cntJoined += 1
             logging.info("Joined giveaway [" + str(id) + "]")
         else:
-            # join button not found
+            # Join button not found
             content_ga = req_ga_get.text
             message_ga = "Giveaway [" + str(id) + "] exists, but can't be joined. Reason: "
             if(content_ga.find("You have joined this giveaway already.") > -1):
@@ -96,8 +127,10 @@ while(True):
                 logging.info(message_ga + "Giveaway has not been published yet.")
             else:
                 logging.critical(message_ga + "Unknown reason!")
+
     else:
         logging.info("Reached last giveaway ID [" + str(id - 1) + "]")
+        # Store last ID (first not existing giveaway) in txt file
         i = 0 
         while(i < len(input)):
             if(input[i].split(":")[0] == account_name):
@@ -109,5 +142,9 @@ while(True):
         with open("lastIDs.txt", "w") as file:
         	file.writelines(input)
         break
+
     id += 1
-    time.sleep(1 + random.randint(1, 5))
+    time.sleep(random.randint(1, 2))
+
+logging.info("Total amount of joined giveaways in this run: >> " + str(cntJoined) + " <<")
+logging.info("Bot successfully terminated.")
