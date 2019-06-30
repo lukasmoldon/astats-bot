@@ -65,10 +65,10 @@ cookies_ga = {
 
 # Modify Header for GET and POST (remove "python-requests/.." User-Agent)
 header = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.103 Safari/537.36', 
-    'Accept-Encoding': 'gzip, deflate', 
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3', 
-    'Connection': 'keep-alive'
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.103 Safari/537.36", 
+    "Accept-Encoding": "gzip, deflate", 
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3", 
+    "Connection": "keep-alive"
 }
 
 # Payload for joining the giveaway
@@ -79,6 +79,16 @@ payload_ga = {
 
 # Counters for the statistics
 cntJoined = 0
+cntfailed = {
+    "joined_already": 0,
+    "game_owned": 0,
+    "giveaway_ended": 0,
+    "invalid_cookie": 0,
+    "group_missing": 0,
+    "max_entries": 0,
+    "not_published": 0,
+    "unkown": 0
+}
 
 #Sessions for GET and POST requests
 session_ga_post = requests.Session()
@@ -99,7 +109,7 @@ while(True):
     # Search for button to join the giveaway
     button = req_ga_get.html.find("[name=JoinGiveaway]")
     if(len(navbar) > 0):
-        
+
         if(len(button) > 0):
             time.sleep(random.randint(1, 3))
             # POST request to join the giveaway
@@ -111,21 +121,29 @@ while(True):
             content_ga = req_ga_get.text
             message_ga = "Giveaway [" + str(id) + "] exists, but can't be joined. Reason: "
             if(content_ga.find("You have joined this giveaway already.") > -1):
+                cntfailed["joined_already"] += 1
                 logging.info(message_ga + "Giveaway already joined.")
             elif(content_ga.find("You already own the giveaway game.") > -1):
+                cntfailed["game_owned"] += 1
                 logging.info(message_ga + "Giveaway game already in steam library")
             elif(content_ga.find("This giveaway has ended.") > -1):
+                cntfailed["giveaway_ended"] += 1
                 logging.info(message_ga + "Giveaway ended.")
             elif(content_ga.find("You need to be logged in to participate in giveaways.") > -1):
+                cntfailed["invalid_cookie"] += 1
                 logging.critical(message_ga + "Cookie invalid!")
                 break
             elif(content_ga.find("not in the required group") > -1):
+                cntfailed["group_missing"] += 1
                 logging.warning(message_ga + "Group membership missing for " + re.search('Steam group member of (.*)</td>', content_ga).group(1))
             elif(content_ga.find("aximum entries") > -1):
+                cntfailed["max_entries"] += 1
                 logging.info(message_ga + "Maximum entries reached.")
             elif(content_ga.find("This giveaway has not been published.") > -1):
+                cntfailed["not_published"] += 1
                 logging.info(message_ga + "Giveaway has not been published yet.")
             else:
+                cntfailed["unkown"] += 1
                 logging.critical(message_ga + "Unknown reason!")
 
     else:
@@ -145,6 +163,38 @@ while(True):
 
     id += 1
     time.sleep(random.randint(1, 2))
+
+
+# Manage global stats
+
+sumCntFailed = 0
+for key in cntfailed:
+    sumCntFailed += cntfailed[key]
+
+tempStats = [
+    1, # increment for bot starting counter
+    cntJoined, 
+    sumCntFailed, # sum of all failed joins in the following
+    cntfailed["joined_already"],
+    cntfailed["game_owned"],
+    cntfailed["giveaway_ended"],
+    cntfailed["invalid_cookie"],
+    cntfailed["group_missing"],
+    cntfailed["max_entries"],
+    cntfailed["not_published"],
+    cntfailed["unkown"]
+    ]
+
+with open("stats.txt", "r") as file:
+    inputStats = file.readlines()
+
+i = 0 
+while(i < len(inputStats)):
+    inputStats[i] = inputStats[i].split(":")[0] + ":" + str(tempStats[i] + int(inputStats[i].split(":")[1])) + "\n"
+    i += 1
+
+with open("stats.txt", "w") as file:
+        	file.writelines(inputStats)
 
 logging.info("Total amount of joined giveaways in this run: >> " + str(cntJoined) + " <<")
 logging.info("Bot successfully terminated.")
