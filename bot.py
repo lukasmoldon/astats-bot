@@ -4,30 +4,50 @@ import requests_html
 import time
 import random
 import logging
-import re
+import re # RegEx
 import urllib3
 
-# Create default logger
-logging.basicConfig(format='%(asctime)s [%(levelname)s] - %(message)s', datefmt='%d-%m-%y %H:%M:%S', level=logging.INFO)
+# Debug Mode on?
+debug = False
 
-# Disable SSL-Warning
+# Create default logger
+if(debug):
+    logging.basicConfig(format='%(asctime)s [%(levelname)s] - %(message)s', datefmt='%d-%m-%y %H:%M:%S', level=logging.DEBUG)
+    logging.debug("Debug mode is turned on")
+else:
+    logging.basicConfig(format='%(asctime)s [%(levelname)s] - %(message)s', datefmt='%d-%m-%y %H:%M:%S', level=logging.INFO)
+
+# Initialize counters for logger statistics
+cntLogger = {
+    "warning": 0,
+    "error": 0,
+    "critical": 0
+}
+
+# After how many (successively!) requests resulting in a non existing page should the bot get terminated?
+thresholdDeadPage = 3
+
+# Dont modify counter for successively requests resulting in a non existing page
+cntDeadPage = 0
+
+# Disable SSL-Warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# URL for giveaways
+# URL for giveaways (giveawayID missing)
 url_ga = "https://astats.astats.nl/astats/Giveaway.php?GiveawayID="
 
-# URL for profile page
+# URL for profile page (steamID missing)
 url_profile_ga = "http://astats.astats.nl/astats/User_Info.php?SteamID64="
 
 # Get account name from first console argument
 account_name = sys.argv[1]
 
-# Read last ID for the account name from txt file
+# Read all last used giveaway IDs from txt file
 with open("lastIDs.txt", "r") as file:
     input = file.readlines()
 
+# Find corresponding giveaway ID for this account
 id = -1
-
 i = 0 
 while(i < len(input)):
     input[i] = input[i].rstrip()
@@ -37,6 +57,7 @@ while(i < len(input)):
     i += 1
 if(id == -1):
     logging.critical("Corrupted lastIDs.txt file!")
+    cntLogger["critical"] += 1
 
 # Steam64ID for diffrent accounts
 steam_id = {
@@ -63,7 +84,7 @@ cookies_ga = {
     "PHPSESSID": accounts_phpID[account_name]
 }
 
-# Modify Header for GET and POST (remove "python-requests/.." User-Agent)
+# Modify Header for GET and POST (e.g. replace "python-requests/.." User-Agent)
 header = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.103 Safari/537.36", 
     "Accept-Encoding": "gzip, deflate", 
@@ -77,7 +98,7 @@ payload_ga = {
     "JoinGiveaway": "Join"
 }
 
-# Counters for the statistics
+# Initialize counters for the statistics
 cntJoined = 0
 cntfailed = {
     "joined_already": 0,
@@ -90,34 +111,63 @@ cntfailed = {
     "unkown": 0
 }
 
-#Sessions for GET and POST requests
+# Sessions for GET and POST requests
 session_ga_post = requests.Session()
 session_ga_get = requests_html.HTMLSession()
 
-# Visit profile page before joining giveaways
+# Visit profile page before joining giveaways (this gets logged on the webserver)
+logging.debug("Visiting profile page:")
 profile_ga = session_ga_get.get(url_profile_ga + steam_id[account_name], cookies=cookies_ga, headers=header, verify=False)
 
-# Check if HTTP request works
+# Check if initial GET request worked
 if(not profile_ga.ok):
-    logging.critical("Received HTTP status code" + profile_ga.status_code)
+    logging.critical("Received HTTP status code: " + profile_ga.status_code)
+    cntLogger["critical"] += 1
+
+time.sleep(1)
+
+# Check AStats crawler status for server load prediction
+logging.debug("Checking AStats crawler:")
+crawlerqueue = session_ga_get.get("http://astats.astats.nl/astats/Stats.php", cookies=cookies_ga, headers=header, verify=False)
+crawlerload = re.search("<br>(.*) user command(s)? (is|are) currently in the crawler queue.</li>", crawlerqueue.text)
+
+time.sleep(1)
+
+if(crawlerload == None): 
+    logging.error("Error occurred while trying to access crawler load")
+    cntLogger["error"] += 1
+else:
+    crawlerload = int(crawlerload.group(1))
+    if(crawlerload > 99):
+        logging.warning("Astats service is currently under heavy load, crawler queue lenght: " + str(crawlerload))
+        cntLogger["warning"] += 1
+
+# Start searching for open giveaways
+logging.debug("Starting main algorithm:")
 
 while(True):
-	# GET request for giveaway page
+    if(cntLogger["critical"] > 0):
+        logging.critical("Critical Error occurred!")
+        break
+	# GET request for giveaway page with specific id
     req_ga_get = session_ga_get.get(url_ga + str(id), cookies=cookies_ga, headers=header, verify=False)
-    # Search for the navbar -> Page exists
+    # Search for the navbar (Does the page/giveaway exist?)
     navbar = req_ga_get.html.find(".navbar-brand")
-    # Search for button to join the giveaway
+    # Search for button to join the giveaway (Is it possible to join the giveaway?)
     button = req_ga_get.html.find("[name=JoinGiveaway]")
     if(len(navbar) > 0):
+        # Giveaway exists, reset counter for successively(!) requests resulting in a non existing page
+        cntDeadPage = 0
 
         if(len(button) > 0):
+            # Giveaway can be joined
             time.sleep(random.randint(1, 3))
             # POST request to join the giveaway
             req_ga_post = session_ga_post.post(url_ga + str(id), cookies=cookies_ga, headers=header, data=payload_ga, verify=False)
             cntJoined += 1
             logging.info("Joined giveaway [" + str(id) + "]")
         else:
-            # Join button not found
+            # Giveaway can not be joined
             content_ga = req_ga_get.text
             message_ga = "Giveaway [" + str(id) + "] exists, but can't be joined. Reason: "
             if(content_ga.find("You have joined this giveaway already.") > -1):
@@ -132,10 +182,12 @@ while(True):
             elif(content_ga.find("You need to be logged in to participate in giveaways.") > -1):
                 cntfailed["invalid_cookie"] += 1
                 logging.critical(message_ga + "Cookie invalid!")
+                cntLogger["critical"] += 1
                 break
             elif(content_ga.find("not in the required group") > -1):
                 cntfailed["group_missing"] += 1
-                logging.warning(message_ga + "Group membership missing for " + re.search('Steam group member of (.*)</td>', content_ga).group(1))
+                logging.warning(message_ga + "Group membership missing for " + re.search("Steam group member of (.*)</td>", content_ga).group(1))
+                cntLogger["warning"] += 1
             elif(content_ga.find("aximum entries") > -1):
                 cntfailed["max_entries"] += 1
                 logging.info(message_ga + "Maximum entries reached.")
@@ -145,21 +197,29 @@ while(True):
             else:
                 cntfailed["unkown"] += 1
                 logging.critical(message_ga + "Unknown reason!")
+                cntLogger["critical"] += 1
+                break
 
     else:
-        logging.info("Reached last giveaway ID [" + str(id - 1) + "]")
-        # Store last ID (first not existing giveaway) in txt file
-        i = 0 
-        while(i < len(input)):
-            if(input[i].split(":")[0] == account_name):
-                input[i] = account_name + ":" + str(id) + "\n"
-            else:
-                if(i < len(input) - 1):
-                    input[i] += "\n"
-            i += 1
-        with open("lastIDs.txt", "w") as file:
-        	file.writelines(input)
-        break
+        # Giveaway does not exist
+        if(cntDeadPage > thresholdDeadPage):
+            # threshold reached
+            logging.info("Reached last giveaway ID [" + str(id - 1 - cntDeadPage) + "]")
+            # Store last ID (first not existing giveaway) in txt file
+            i = 0 
+            while(i < len(input)):
+                if(input[i].split(":")[0] == account_name):
+                    input[i] = account_name + ":" + str(int(id - cntDeadPage)) + "\n"
+                else:
+                    if(i < len(input) - 1):
+                        input[i] += "\n"
+                i += 1
+            with open("lastIDs.txt", "w") as file:
+                file.writelines(input)
+            break
+        else:
+            logging.debug("Found non exisitng giveaway page with ID [" + str(id) + "]")
+            cntDeadPage += 1
 
     id += 1
     time.sleep(random.randint(1, 2))
@@ -167,14 +227,16 @@ while(True):
 
 # Manage global stats
 
+# Add up all fail-counter
 sumCntFailed = 0
 for key in cntfailed:
     sumCntFailed += cntfailed[key]
 
+# List respecting stats.txt layout containing all counters and stats
 tempStats = [
-    1, # increment for bot starting counter
+    1, # increment by 1 for bot starting counter in stats file
     cntJoined, 
-    sumCntFailed, # sum of all failed joins in the following
+    sumCntFailed,
     cntfailed["joined_already"],
     cntfailed["game_owned"],
     cntfailed["giveaway_ended"],
@@ -185,16 +247,23 @@ tempStats = [
     cntfailed["unkown"]
     ]
 
+# Read all old stats and save them temporary
 with open("stats.txt", "r") as file:
     inputStats = file.readlines()
 
+# Add all local counter values to the old stats
 i = 0 
 while(i < len(inputStats)):
     inputStats[i] = inputStats[i].split(":")[0] + ":" + str(tempStats[i] + int(inputStats[i].split(":")[1])) + "\n"
     i += 1
 
+# Store new stats in txt file
 with open("stats.txt", "w") as file:
         	file.writelines(inputStats)
 
+# Run completed
 logging.info("Total amount of joined giveaways in this run: >> " + str(cntJoined) + " <<")
 logging.info("Bot successfully terminated.")
+logging.info("Warnings: " + str(cntLogger["warning"]))
+logging.info("Errors: " + str(cntLogger["error"]))
+logging.info("Critical Errors: " + str(cntLogger["critical"]))
