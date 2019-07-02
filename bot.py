@@ -27,8 +27,16 @@ cntLogger = {
 # After how many (successively!) requests resulting in a non existing page should the bot get terminated?
 thresholdDeadPage = 3
 
-# Dont modify counter for successively requests resulting in a non existing page
+# After how many (successively!) GET requests resulting in a HTTPS Error should the bot get terminated?
+thresholdExceptionGET = 5
+
+# After how many (successively!) POST requests resulting in a HTTPS Error should the bot get terminated?
+thresholdExceptionPOST = 2
+
+# Dont modify these counters
 cntDeadPage = 0
+cntExceptionGET = 0
+cntExceptionPOST = 0
 
 # Disable SSL-Warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -37,7 +45,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 url_ga = "https://astats.astats.nl/astats/Giveaway.php?GiveawayID="
 
 # URL for profile page (steamID missing)
-url_profile_ga = "http://astats.astats.nl/astats/User_Info.php?SteamID64="
+url_profile_ga = "https://astats.astats.nl/astats/User_Info.php?SteamID64="
 
 # Get account name from first console argument
 account_name = sys.argv[1]
@@ -117,7 +125,11 @@ session_ga_get = requests_html.HTMLSession()
 
 # Visit profile page before joining giveaways (this gets logged on the webserver)
 logging.debug("Visiting profile page:")
-profile_ga = session_ga_get.get(url_profile_ga + steam_id[account_name], cookies=cookies_ga, headers=header, verify=False)
+try:
+    profile_ga = session_ga_get.get(url_profile_ga + steam_id[account_name], cookies=cookies_ga, headers=header, verify=False)
+except:
+    logging.critical("Visiting profile page failed")
+    cntLogger["critical"] += 1
 
 # Check if initial GET request worked
 if(not profile_ga.ok):
@@ -128,7 +140,12 @@ time.sleep(1)
 
 # Check AStats crawler status for server load prediction
 logging.debug("Checking AStats crawler:")
-crawlerqueue = session_ga_get.get("http://astats.astats.nl/astats/Stats.php", cookies=cookies_ga, headers=header, verify=False)
+try:
+    crawlerqueue = session_ga_get.get("https://astats.astats.nl/astats/Stats.php", cookies=cookies_ga, headers=header, verify=False)
+except:
+    logging.critical("Checking AStats crawler failed")
+    cntLogger["critical"] += 1
+
 crawlerload = re.search("<br>(.*) user command(s)? (is|are) currently in the crawler queue.</li>", crawlerqueue.text)
 
 time.sleep(1)
@@ -150,7 +167,21 @@ while(True):
         logging.critical("Critical Error occurred!")
         break
 	# GET request for giveaway page with specific id
-    req_ga_get = session_ga_get.get(url_ga + str(id), cookies=cookies_ga, headers=header, verify=False)
+    while(cntExceptionGET < thresholdExceptionGET):
+        try:
+            req_ga_get = session_ga_get.get(url_ga + str(id), cookies=cookies_ga, headers=header, verify=False)
+        except:
+            cntExceptionGET += 1
+            logging.warning("Failed GET request on ID [" + id + "] - tried " + cntExceptionGET + " times")
+            cntLogger["warning"] += 1
+            time.sleep(1)
+        else:
+            cntExceptionGET = 0
+            break
+    if(cntExceptionGET >= thresholdExceptionGET):
+        logging.critical("GET request failed " + cntExceptionGET + " times!")
+        cntExceptionGET = 0
+        break
     # Search for the navbar (Does the page/giveaway exist?)
     navbar = req_ga_get.html.find(".navbar-brand")
     # Search for button to join the giveaway (Is it possible to join the giveaway?)
@@ -163,9 +194,23 @@ while(True):
             # Giveaway can be joined
             time.sleep(random.randint(1, 3))
             # POST request to join the giveaway
-            req_ga_post = session_ga_post.post(url_ga + str(id), cookies=cookies_ga, headers=header, data=payload_ga, verify=False)
-            cntJoined += 1
-            logging.info("Joined giveaway [" + str(id) + "]")
+            while(cntExceptionPOST < thresholdExceptionPOST):
+                try:
+                    req_ga_post = session_ga_post.post(url_ga + str(id), cookies=cookies_ga, headers=header, data=payload_ga, verify=False)
+                except:
+                    cntExceptionPOST += 1
+                    logging.warning("Failed POST request on ID [" + id + "] - tried " + cntExceptionPOST + " times")
+                    cntLogger["warning"] += 1
+                    time.sleep(1)
+                else:
+                    cntExceptionPOST = 0
+                    cntJoined += 1
+                    logging.info("Joined giveaway [" + str(id) + "]")
+                    break
+            if(cntExceptionPOST >= thresholdExceptionPOST):
+                logging.critical("POST request failed " + thresholdExceptionPOST + " times!")
+                cntExceptionPOST = 0
+                break
         else:
             # Giveaway can not be joined
             content_ga = req_ga_get.text
@@ -202,8 +247,9 @@ while(True):
 
     else:
         # Giveaway does not exist
-        if(cntDeadPage > thresholdDeadPage):
+        if(cntDeadPage >= (thresholdDeadPage - 1)):
             # threshold reached
+            logging.debug("Found non exisitng giveaway page with ID [" + str(id) + "]")
             logging.info("Reached last giveaway ID [" + str(id - 1 - cntDeadPage) + "]")
             # Store last ID (first not existing giveaway) in txt file
             i = 0 
