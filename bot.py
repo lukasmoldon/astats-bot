@@ -6,6 +6,7 @@ import random
 import logging
 import re # RegEx
 import urllib3
+from termcolor import colored
 
 # Debug Mode on?
 debug = False
@@ -66,6 +67,10 @@ while(i < len(input)):
 if(id == -1):
     logging.critical("Corrupted lastIDs.txt file!")
     cntLogger["critical"] += 1
+    sys.exit()
+
+# Check at the end, if any progress were made
+backupID = id
 
 # Steam64ID for diffrent accounts
 steam_id = {
@@ -130,11 +135,18 @@ try:
 except:
     logging.critical("Visiting profile page failed")
     cntLogger["critical"] += 1
+    sys.exit()
 
 # Check if initial GET request worked
 if(not profile_ga.ok):
     logging.critical("Received HTTP status code: " + profile_ga.status_code)
     cntLogger["critical"] += 1
+    sys.exit()
+
+# Check mailbox
+if(profile_ga.text.find("new message") > -1):
+    logging.warning("You have " + re.search("You have (.*)!</a>", profile_ga.text).group(1) + "!")
+    cntLogger["warning"] += 1
 
 time.sleep(1)
 
@@ -145,6 +157,7 @@ try:
 except:
     logging.critical("Checking AStats crawler failed")
     cntLogger["critical"] += 1
+    sys.exit()
 
 crawlerload = re.search("<br>(.*) user command(s)? (is|are) currently in the crawler queue.</li>", crawlerqueue.text)
 
@@ -154,10 +167,14 @@ if(crawlerload == None):
     logging.error("Error occurred while trying to access crawler load")
     cntLogger["error"] += 1
 else:
-    crawlerload = int(crawlerload.group(1))
-    if(crawlerload > 99):
-        logging.warning("Astats service is currently under heavy load, crawler queue lenght: " + str(crawlerload))
-        cntLogger["warning"] += 1
+    try:
+        crawlerload = int(crawlerload.group(1).replace(" ", "").replace(".", ""))
+        if(crawlerload > 99):
+            logging.warning("Astats service is currently under heavy load, crawler queue lenght: " + str(crawlerload))
+            cntLogger["warning"] += 1
+    except:
+        logging.error("Error occurred while trying to compute crawler load, value is " + str(crawlerload))
+        cntLogger["error"] += 1
 
 # Start searching for open giveaways
 logging.debug("Starting main algorithm:")
@@ -172,14 +189,14 @@ while(True):
             req_ga_get = session_ga_get.get(url_ga + str(id), cookies=cookies_ga, headers=header, verify=False)
         except:
             cntExceptionGET += 1
-            logging.warning("Failed GET request on ID [" + id + "] - tried " + cntExceptionGET + " times")
+            logging.warning("Failed GET request on ID [" + id + "] - tried " + cntExceptionGET + " time(s)")
             cntLogger["warning"] += 1
             time.sleep(1)
         else:
             cntExceptionGET = 0
             break
     if(cntExceptionGET >= thresholdExceptionGET):
-        logging.critical("GET request failed " + cntExceptionGET + " times!")
+        logging.critical("GET request failed " + cntExceptionGET + " time(s)!")
         cntExceptionGET = 0
         break
     # Search for the navbar (Does the page/giveaway exist?)
@@ -199,7 +216,7 @@ while(True):
                     req_ga_post = session_ga_post.post(url_ga + str(id), cookies=cookies_ga, headers=header, data=payload_ga, verify=False)
                 except:
                     cntExceptionPOST += 1
-                    logging.warning("Failed POST request on ID [" + id + "] - tried " + cntExceptionPOST + " times")
+                    logging.warning("Failed POST request on ID [" + id + "] - tried " + cntExceptionPOST + " time(s)")
                     cntLogger["warning"] += 1
                     time.sleep(1)
                 else:
@@ -208,7 +225,7 @@ while(True):
                     logging.info("Joined giveaway [" + str(id) + "]")
                     break
             if(cntExceptionPOST >= thresholdExceptionPOST):
-                logging.critical("POST request failed " + thresholdExceptionPOST + " times!")
+                logging.critical("POST request failed " + thresholdExceptionPOST + " time(s)!")
                 cntExceptionPOST = 0
                 break
         else:
@@ -250,18 +267,22 @@ while(True):
         if(cntDeadPage >= (thresholdDeadPage - 1)):
             # threshold reached
             logging.debug("Found non exisitng giveaway page with ID [" + str(id) + "]")
-            logging.info("Reached last giveaway ID [" + str(id - 1 - cntDeadPage) + "]")
-            # Store last ID (first not existing giveaway) in txt file
-            i = 0 
-            while(i < len(input)):
-                if(input[i].split(":")[0] == account_name):
-                    input[i] = account_name + ":" + str(int(id - cntDeadPage)) + "\n"
-                else:
-                    if(i < len(input) - 1):
-                        input[i] += "\n"
-                i += 1
-            with open("lastIDs.txt", "w") as file:
-                file.writelines(input)
+            # Check if there is some progress
+            if(backupID <= id - 1 - cntDeadPage):
+                logging.info("Reached last giveaway ID [" + str(id - 1 - cntDeadPage) + "]")
+                # Store last ID (first not existing giveaway) in txt file
+                i = 0 
+                while(i < len(input)):
+                    if(input[i].split(":")[0] == account_name):
+                        input[i] = account_name + ":" + str(int(id - cntDeadPage)) + "\n"
+                    else:
+                        if(i < len(input) - 1):
+                            input[i] += "\n"
+                    i += 1
+                with open("lastIDs.txt", "w") as file:
+                    file.writelines(input)
+            else:
+                logging.info("No new giveaways have been added since last run.")
             break
         else:
             logging.debug("Found non exisitng giveaway page with ID [" + str(id) + "]")
@@ -308,8 +329,30 @@ with open("stats.txt", "w") as file:
         	file.writelines(inputStats)
 
 # Run completed
-logging.info("Total amount of joined giveaways in this run: >> " + str(cntJoined) + " <<")
-logging.info("Bot successfully terminated.")
-logging.info("Warnings: " + str(cntLogger["warning"]))
-logging.info("Errors: " + str(cntLogger["error"]))
-logging.info("Critical Errors: " + str(cntLogger["critical"]))
+if(cntJoined > 0):
+    logging.info("Total amount of joined giveaways in this run: >> " + str(cntJoined) + " <<")
+noIncidents = True
+
+if(cntLogger["warning"] > 0):
+    logging.info(colored("Warnings: " + str(cntLogger["warning"]), "yellow"))
+    noIncidents = False
+else:
+    logging.info("Warnings: 0")
+
+if(cntLogger["error"] > 0):
+    logging.info(colored("Errors: " + str(cntLogger["error"]), "red"))
+    noIncidents = False
+else:
+    logging.info("Errors: 0")
+
+if(cntLogger["critical"] > 0):
+    logging.info(colored("Critical Errors: " + str(cntLogger["critical"]), "red"))
+    noIncidents = False
+else:
+    logging.info("Critical Errors: 0")
+
+if(noIncidents):
+    logging.info(colored("Bot successfully terminated.", "green"))
+else:
+    logging.info(colored("Bot terminated.", "red"))
+    
