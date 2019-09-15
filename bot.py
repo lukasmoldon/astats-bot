@@ -139,7 +139,7 @@ except:
 
 # Check if initial GET request worked
 if(not profile_ga.ok):
-    logging.critical("Received HTTP status code: " + profile_ga.status_code)
+    logging.critical("Received HTTP status code: " + str(profile_ga.status_code))
     cntLogger["critical"] += 1
     sys.exit()
 
@@ -189,14 +189,14 @@ while(True):
             req_ga_get = session_ga_get.get(url_ga + str(id), cookies=cookies_ga, headers=header, verify=False)
         except:
             cntExceptionGET += 1
-            logging.warning("Failed GET request on ID [" + id + "] - tried " + cntExceptionGET + " time(s)")
+            logging.warning("Failed GET request on ID [" + str(id) + "] - tried " + str(cntExceptionGET) + " time(s)")
             cntLogger["warning"] += 1
             time.sleep(1)
         else:
             cntExceptionGET = 0
             break
     if(cntExceptionGET >= thresholdExceptionGET):
-        logging.critical("GET request failed " + cntExceptionGET + " time(s)!")
+        logging.critical("GET request failed " + str(cntExceptionGET) + " time(s)!")
         cntExceptionGET = 0
         break
     # Search for the navbar (Does the page/giveaway exist?)
@@ -216,7 +216,7 @@ while(True):
                     req_ga_post = session_ga_post.post(url_ga + str(id), cookies=cookies_ga, headers=header, data=payload_ga, verify=False)
                 except:
                     cntExceptionPOST += 1
-                    logging.warning("Failed POST request on ID [" + id + "] - tried " + cntExceptionPOST + " time(s)")
+                    logging.warning("Failed POST request on ID [" + str(id) + "] - tried " + str(cntExceptionPOST) + " time(s)")
                     cntLogger["warning"] += 1
                     time.sleep(1)
                 else:
@@ -225,7 +225,7 @@ while(True):
                     logging.info("Joined giveaway [" + str(id) + "]")
                     break
             if(cntExceptionPOST >= thresholdExceptionPOST):
-                logging.critical("POST request failed " + thresholdExceptionPOST + " time(s)!")
+                logging.critical("POST request failed " + str(thresholdExceptionPOST) + " time(s)!")
                 cntExceptionPOST = 0
                 break
         else:
