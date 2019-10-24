@@ -2,11 +2,15 @@ import sys
 import requests
 import requests_html
 import time
+import datetime
 import random
 import logging
 import re # RegEx
 import urllib3
 from termcolor import colored
+
+# Start logging runtime of this single run
+log_starttime = datetime.datetime.now()
 
 # Debug Mode on?
 debug = False
@@ -381,3 +385,6 @@ if(noIncidents):
 else:
     logging.info(colored("Bot terminated.", "red"))
     
+log_endtime = datetime.datetime.now()
+log_runtime = (log_endtime - log_starttime)
+logging.info("Total runtime: " + str(log_runtime))
