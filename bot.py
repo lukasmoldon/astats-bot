@@ -34,19 +34,26 @@ thresholdExceptionGET = 5
 # After how many (successively!) POST requests resulting in a HTTPS Error should the bot get terminated?
 thresholdExceptionPOST = 2
 
-# Dont modify these counters
+# Dont modify these counters/flags
 cntDeadPage = 0
 cntExceptionGET = 0
 cntExceptionPOST = 0
+dnsworking = True
 
 # Disable SSL-Warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # URL for giveaways (giveawayID missing)
 url_ga = "https://astats.astats.nl/astats/Giveaway.php?GiveawayID="
+url_ga_backup = "http://31.151.215.13/astats/Giveaway.php?GiveawayID="
 
 # URL for profile page (steamID missing)
 url_profile_ga = "https://astats.astats.nl/astats/User_Info.php?SteamID64="
+url_profile_ga_backup = "http://31.151.215.13/astats/User_Info.php?SteamID64="
+
+# URL for crawlerqueue
+url_crawler = "https://astats.astats.nl/astats/Stats.php"
+url_crawler_backup = "http://31.151.215.13/astats/Stats.php"
 
 # Get account name from first console argument
 account_name = sys.argv[1]
@@ -133,9 +140,18 @@ logging.debug("Visiting profile page:")
 try:
     profile_ga = session_ga_get.get(url_profile_ga + steam_id[account_name], cookies=cookies_ga, headers=header, verify=False)
 except:
-    logging.critical("Visiting profile page failed")
-    cntLogger["critical"] += 1
-    sys.exit()
+    dnsworking = False
+    try:
+        profile_ga = session_ga_get.get(url_profile_ga_backup + steam_id[account_name], cookies=cookies_ga, headers=header, verify=False)
+    except:
+        logging.critical("Visiting profile page failed")
+        cntLogger["critical"] += 1
+        sys.exit()
+
+if(dnsworking):
+    logging.debug("DNS is working.")
+else:
+    logging.warning("DNS is NOT working!")
 
 # Check if initial GET request worked
 if(not profile_ga.ok):
@@ -153,7 +169,10 @@ time.sleep(1)
 # Check AStats crawler status for server load prediction
 logging.debug("Checking AStats crawler:")
 try:
-    crawlerqueue = session_ga_get.get("https://astats.astats.nl/astats/Stats.php", cookies=cookies_ga, headers=header, verify=False)
+    if(dnsworking):
+        crawlerqueue = session_ga_get.get(url_crawler, cookies=cookies_ga, headers=header, verify=False)
+    else:
+        crawlerqueue = session_ga_get.get(url_crawler_backup, cookies=cookies_ga, headers=header, verify=False)
 except:
     logging.critical("Checking AStats crawler failed")
     cntLogger["critical"] += 1
@@ -186,7 +205,10 @@ while(True):
 	# GET request for giveaway page with specific id
     while(cntExceptionGET < thresholdExceptionGET):
         try:
-            req_ga_get = session_ga_get.get(url_ga + str(id), cookies=cookies_ga, headers=header, verify=False)
+            if(dnsworking):
+                req_ga_get = session_ga_get.get(url_ga + str(id), cookies=cookies_ga, headers=header, verify=False)
+            else:
+                req_ga_get = session_ga_get.get(url_ga_backup + str(id), cookies=cookies_ga, headers=header, verify=False)
         except:
             cntExceptionGET += 1
             logging.warning("Failed GET request on ID [" + str(id) + "] - tried " + str(cntExceptionGET) + " time(s)")
@@ -213,7 +235,10 @@ while(True):
             # POST request to join the giveaway
             while(cntExceptionPOST < thresholdExceptionPOST):
                 try:
-                    req_ga_post = session_ga_post.post(url_ga + str(id), cookies=cookies_ga, headers=header, data=payload_ga, verify=False)
+                    if(dnsworking):
+                        req_ga_post = session_ga_post.post(url_ga + str(id), cookies=cookies_ga, headers=header, data=payload_ga, verify=False)
+                    else:
+                        req_ga_post = session_ga_post.post(url_ga_backup + str(id), cookies=cookies_ga, headers=header, data=payload_ga, verify=False)
                 except:
                     cntExceptionPOST += 1
                     logging.warning("Failed POST request on ID [" + str(id) + "] - tried " + str(cntExceptionPOST) + " time(s)")
