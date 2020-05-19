@@ -31,3 +31,6 @@ V5: finished debug-mode, added logger notification at the end, fixed bug with de
 V6: fixed bug with GET request failing, added exception handling, added counters/thresholds for exceptions in POST and GET
 
 V7: fixed logging bugs, improved console display
+
+# Preview
+![Preview](https://github.com/lukasmoldon/astats-bot/blob/master/example.JPG)
