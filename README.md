@@ -1,19 +1,19 @@
 # Introduction
 --- 
-> ⚠️ **Warning**: Astats updated their robots.txt, the crawler should not be used anymore.
+> ⚠️ **Warning**: Since Astats updated their robots.txt, the crawler should not be used anymore.
 ---
 
-This bot crawls a third party analytics side for Steam called "AStats", collects relevant data from selected user profiles and autonomously joins active steam game key giveaways for that user. The bot simulates human behaviour, including a randomized waiting period (minimum 2 sec) after every action on the website, preventing an increased server load. 
+This bot crawls a third party analytics side for Steam called "AStats", collects relevant data from selected user profiles and autonomously joins active steam game key giveaways for these users. Users get notified about successfully won giveaways within the interface. Already joined giveaway IDs get saved separately for each account for future runs in order to prevent unnecessary double checking of giveaways. The bot simulates human behaviour, including a randomized waiting period (minimum 2 sec) after every action on the website, preventing an increased server load. 
 
 # Install
-The bot runs on Python 3.7 and needs the following modules installed: requests, requests-html, logging, termcolor, regex, urllib3
+The bot runs on Python 3.8 and needs the following modules installed: requests, requests-html, logging, termcolor, regex, urllib3
 
 # Start and use the bot
 --- 
-> ⚠️ **Warning**: This crawler works, but is a simple solution, which makes **unverified HTTPS request**. Use at your own risk.
+> ⚠️ **Warning**: This crawler works, but represents a simple solution, which performs **unverified HTTPS requests**. Use at your own risk.
 ---
 
-Before starting the bot for the first time, you have to insert the Steam community profile ID in "steam_id" and the Astats login cookie ID/PHP session ID in "accounts_cookie"/accounts_phpID for each account.
+Before starting the bot for the first time, you have to insert the Steam community profile ID in "*steam_id*" and the Astats login cookie ID/PHP session ID in "*accounts_cookie*"/"*accounts_phpID*" for each account.
 
 You can use the batch file(s) to start the bot using [Windows Task Scheduler](https://en.wikipedia.org/wiki/Windows_Task_Scheduler) (default: 2 accounts named main/secondary).
 
