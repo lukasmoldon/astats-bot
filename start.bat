@@ -1,3 +1,3 @@
-py bot.py main
-py bot.py secondary
+python bot.py main
+python bot.py secondary
 pause
