@@ -1,10 +1,10 @@
-bot_started:0
+bot_started:4
 joined:0
-failed:0
+failed:2
 failed_joined_already:0
 failed_game_owned:0
 failed_giveaway_ended:0
-failed_invalid_cookie:0
+failed_invalid_cookie:2
 failed_group_missing:0
 failed_max_entries:0
 failed_not_published:0
