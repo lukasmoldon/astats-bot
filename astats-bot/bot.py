@@ -103,6 +103,7 @@ cntfailed = {
     "group_missing": 0,
     "max_entries": 0,
     "not_published": 0,
+    "not_started": 0,
     "unkown": 0
 }
 
@@ -256,6 +257,9 @@ while(True):
             elif(content_ga.find("This giveaway has not been published.") > -1):
                 cntfailed["not_published"] += 1
                 logging.info(message_ga + "Giveaway has not been published yet.")
+            elif(content_ga.find("This giveaway has not yet started.") > -1):
+                cntfailed["not_started"] += 1
+                logging.info(message_ga + "This giveaway has not yet started.")
             else:
                 cntfailed["unkown"] += 1
                 logging.critical(message_ga + "Unknown reason!")
@@ -311,6 +315,7 @@ tempStats = [
     cntfailed["group_missing"],
     cntfailed["max_entries"],
     cntfailed["not_published"],
+    cntfailed["not_started"],
     cntfailed["unkown"]
     ]
 
