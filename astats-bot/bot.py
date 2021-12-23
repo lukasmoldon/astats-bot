@@ -104,6 +104,7 @@ cntfailed = {
     "max_entries": 0,
     "not_published": 0,
     "not_started": 0,
+    "points_missing": 0,
     "unkown": 0
 }
 
@@ -260,10 +261,16 @@ while(True):
             elif(content_ga.find("This giveaway has not yet started.") > -1):
                 cntfailed["not_started"] += 1
                 logging.info(message_ga + "This giveaway has not yet started.")
+            elif(content_ga.find("You need to have more AStats points to join.") > -1):
+                cntfailed["points_missing"] += 1
+                logging.info(message_ga + "You need to have more AStats points to join.")
             else:
                 cntfailed["unkown"] += 1
                 logging.critical(message_ga + "Unknown reason!")
                 cntLogger["critical"] += 1
+                if debug:
+                    print(req_ga_get.status_code)
+                    print(content_ga)
                 break
 
     else:
@@ -316,6 +323,7 @@ tempStats = [
     cntfailed["max_entries"],
     cntfailed["not_published"],
     cntfailed["not_started"],
+    cntfailed["points_missing"],
     cntfailed["unkown"]
     ]
 
